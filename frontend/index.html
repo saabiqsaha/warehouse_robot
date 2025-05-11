@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Warehouse Robot Simulator - Control Panel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="main-container">
+        <div class="simulation-pane">
+            <canvas id="warehouse-canvas"></canvas>
+        </div>
+
+        <div class="controls-pane">
+            <header class="controls-header">
+                <h1>Simulation Controls</h1>
+                <p>Warehouse Task Orchestrator</p>
+            </header>
+
+            <div class="control-group">
+                <h2>Warehouse Setup</h2>
+                <label for="warehouse-width">Grid Width:</label>
+                <input type="number" id="warehouse-width" value="20" min="5" max="50">
+                <label for="warehouse-height">Grid Height:</label>
+                <input type="number" id="warehouse-height" value="15" min="5" max="50">
+                <button id="init-warehouse-btn">Initialize Warehouse</button>
+            </div>
+
+            <div class="control-group">
+                <h2>Navigation Points</h2>
+                <button id="set-start-btn">Set Robot Start</button>
+                <button id="set-end-btn">Set Destination</button>
+            </div>
+            
+            <div class="control-group">
+                <h2>Obstacle Management</h2>
+                <label for="obstacle-type">Obstacle Type:</label>
+                <select id="obstacle-type">
+                    <option value="crate">Crate</option>
+                    <option value="shelf">Shelf Unit</option>
+                    <option value="restricted">Restricted Zone</option>
+                </select>
+                <button id="toggle-obstacle-btn">Place/Remove Obstacle</button>
+            </div>
+
+            <div class="control-group">
+                <h2>Pathfinding</h2>
+                <button id="find-path-btn">Calculate Path</button>
+                <button id="clear-simulation-btn">Reset Simulation</button>
+            </div>
+
+            <div class="status-console">
+                <h2>System Log</h2>
+                <div id="current-mode-text">Current Mode: Standby</div>
+                <div id="status-message-log">
+                    <p>&gt; System awaiting initialization...</p>
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

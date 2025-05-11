@@ -1,0 +1,227 @@
+/* --- Global Resets & Font --- */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Lato', 'Roboto', sans-serif;
+    background-color: #eef1f5; /* Light grey background */
+    color: #333; /* Standard dark text color */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-size: 16px;
+    line-height: 1.6;
+}
+
+/* --- Main Layout --- */
+.main-container {
+    display: flex;
+    width: 95vw;
+    max-width: 1800px; /* Max width */
+    height: 90vh;
+    max-height: 950px; /* Max height */
+    background-color: #ffffff; /* White background for the container */
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    overflow: hidden; /* Important for border-radius on children */
+}
+
+.simulation-pane {
+    flex: 3; /* Takes up more space */
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #f8f9fa; /* Slightly off-white for the sim area */
+    border-right: 1px solid #dee2e6; /* Light border */
+}
+
+#warehouse-canvas {
+    border: 1px solid #ced4da; /* Light border for canvas */
+    background-color: #ffffff;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    box-shadow: 0 0 5px rgba(0,0,0,0.05);
+}
+
+.controls-pane {
+    flex: 1; /* Takes up less space */
+    padding: 25px;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto; /* Allow scrolling if controls exceed height */
+    background-color: #ffffff;
+}
+
+/* --- Controls Styling --- */
+.controls-header {
+    text-align: left;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.controls-header h1 {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 700;
+    color: #212529;
+    font-size: 24px;
+}
+
+.controls-header p {
+    font-size: 14px;
+    color: #6c757d; /* Muted text color */
+}
+
+.control-group {
+    margin-bottom: 20px;
+}
+
+.control-group h2 {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 500;
+    font-size: 18px;
+    color: #343a40;
+    margin-bottom: 15px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.controls-pane label {
+    display: block;
+    margin-bottom: 8px;
+    color: #495057;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.controls-pane input[type="number"],
+.controls-pane select {
+    width: 100%;
+    padding: 10px 12px;
+    background-color: #fff;
+    border: 1px solid #ced4da;
+    color: #495057;
+    font-family: 'Lato', sans-serif;
+    font-size: 15px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.controls-pane input[type="number"]:focus,
+.controls-pane select:focus {
+    outline: 0;
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.controls-pane button {
+    display: block;
+    width: 100%;
+    padding: 10px 15px;
+    background-color: #007bff; /* Primary blue */
+    color: white;
+    border: 1px solid #007bff;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 500;
+    font-size: 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.controls-pane button:hover {
+    background-color: #0056b3;
+    border-color: #0056b3;
+}
+
+.controls-pane button:active {
+    background-color: #004085;
+    border-color: #00376e;
+}
+
+/* Secondary button style for less prominent actions like "Reset" */
+#clear-simulation-btn {
+    background-color: #6c757d; /* Grey */
+    border-color: #6c757d;
+}
+#clear-simulation-btn:hover {
+    background-color: #5a6268;
+    border-color: #545b62;
+}
+#clear-simulation-btn:active {
+    background-color: #545b62;
+    border-color: #4e555b;
+}
+
+
+/* --- Status Console Styling --- */
+.status-console {
+    margin-top: auto; /* Pushes to the bottom */
+    padding-top: 15px;
+    border-top: 1px solid #e9ecef;
+}
+
+.status-console h2 {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 500;
+    font-size: 18px;
+    color: #343a40;
+    margin-bottom: 10px;
+}
+
+#current-mode-text {
+    color: #007bff; /* Accent color for mode */
+    margin-bottom: 10px;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+#status-message-log {
+    background-color: #f8f9fa; /* Light background for log */
+    border: 1px solid #dee2e6;
+    padding: 10px;
+    border-radius: 4px;
+    min-height: 80px;
+    max-height: 150px; /* Limit max height of log */
+    overflow-y: auto;
+    font-size: 13px;
+    color: #495057;
+}
+
+#status-message-log p {
+    margin-bottom: 5px;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+/* Standard scrollbar styling */
+.controls-pane::-webkit-scrollbar,
+#status-message-log::-webkit-scrollbar {
+    width: 8px;
+}
+
+.controls-pane::-webkit-scrollbar-track,
+#status-message-log::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.controls-pane::-webkit-scrollbar-thumb,
+#status-message-log::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+.controls-pane::-webkit-scrollbar-thumb:hover,
+#status-message-log::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
