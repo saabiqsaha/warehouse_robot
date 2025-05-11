@@ -9,6 +9,8 @@ interface ControlPanelProps {
   statusType: 'info' | 'success' | 'error';
   statusLog: { message: string; type: 'info' | 'success' | 'error' }[];
   obstacleTypes: { value: string; label: string }[];
+  predefinedEnvironments: string[];
+  selectedPreset: string;
   onInitializeWarehouse: () => void;
   onSetStart: () => void;
   onSetEnd: () => void;
@@ -19,6 +21,7 @@ interface ControlPanelProps {
   onWidthChange: (width: number) => void;
   onHeightChange: (height: number) => void;
   onObstacleTypeChange: (type: string) => void;
+  onLoadPreset: (presetName: string) => void;
 }
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -27,6 +30,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   statusType,
   statusLog,
   obstacleTypes,
+  predefinedEnvironments,
+  selectedPreset,
   onInitializeWarehouse,
   onSetStart,
   onSetEnd,
@@ -36,16 +41,37 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onClearSimulation,
   onWidthChange,
   onHeightChange,
-  onObstacleTypeChange
+  onObstacleTypeChange,
+  onLoadPreset
 }) => {
   const { warehouseWidth, warehouseHeight, currentMode } = warehouseState;
+  const isPresetLoaded = !!selectedPreset;
 
   // Helper function to get mode description
   const getModeDescription = () => {
     let modeDescription = "Standby";
-    const selectedObstacleType = obstacleTypes.find(
-      type => type.value === (document.getElementById('obstacle-type') as HTMLSelectElement)?.value
-    )?.label || 'Obstacle';
+    
+    // Safe check for client-side rendering before accessing document
+    // This avoids the "document is not defined" error during server-side rendering
+    let selectedObstacleLabel = 'Obstacle';
+    
+    // Only access DOM on client side
+    const isBrowser = typeof window !== 'undefined';
+    
+    if (isBrowser) {
+      // Find the selected obstacle type from provided prop array
+      // This approach avoids direct DOM querying when possible 
+      const selectElement = document.getElementById('obstacle-type') as HTMLSelectElement;
+      
+      if (selectElement?.value) {
+        const selectedType = obstacleTypes.find(
+          type => type.value === selectElement.value
+        );
+        if (selectedType) {
+          selectedObstacleLabel = selectedType.label;
+        }
+      }
+    }
     
     switch (currentMode) {
       case 'set_start':
@@ -55,10 +81,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         modeDescription = "Set Destination Point (Click on Grid)";
         break;
       case 'toggle_obstacle':
-        modeDescription = `Place/Remove ${selectedObstacleType} (Click on Grid)`;
+        modeDescription = `Place/Remove ${selectedObstacleLabel} (Click on Grid)`;
         break;
       case 'place_multi_grid':
-        modeDescription = `Place Multi-Grid ${selectedObstacleType} (Click on Grid)`;
+        modeDescription = `Place Multi-Grid ${selectedObstacleLabel} (Click on Grid)`;
         break;
       default:
         modeDescription = "Standby";
@@ -75,6 +101,29 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       </header>
 
       <div className="bg-gray-50 rounded-lg p-4 mb-4 shadow-sm">
+        <h2 className="text-lg font-semibold mb-3 pb-2 border-b-2 border-blue-100 text-blue-700">Load Preset Environment</h2>
+        <select 
+          id="preset-select"
+          className="w-full p-2 border border-gray-300 rounded mb-2"
+          value={selectedPreset}
+          onChange={(e) => onLoadPreset(e.target.value)}
+          disabled={isPresetLoaded}
+        >
+          <option value="" disabled={!!selectedPreset}>
+            {isPresetLoaded ? `Preset Loaded: ${selectedPreset}` : "Select a Preset..."}
+          </option>
+          {predefinedEnvironments.map(name => (
+            <option key={name} value={name} disabled={isPresetLoaded && selectedPreset !== name}>
+              {name}
+            </option>
+          ))}
+        </select>
+        {isPresetLoaded && (
+          <p className="text-sm text-gray-500 mt-1">(Clear simulation to load a different preset or customize)</p>
+        )}
+      </div>
+
+      <div className={`bg-gray-50 rounded-lg p-4 mb-4 shadow-sm ${isPresetLoaded ? 'opacity-50 cursor-not-allowed' : ''}`}>
         <h2 className="text-lg font-semibold mb-3 pb-2 border-b-2 border-blue-100 text-blue-700">Warehouse Setup</h2>
         <div className="flex flex-wrap items-center mb-2">
           <label htmlFor="warehouse-width" className="mr-2">Grid Width:</label>
@@ -86,6 +135,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             min={5} 
             max={50}
             onChange={(e) => onWidthChange(parseInt(e.target.value))}
+            disabled={isPresetLoaded}
           />
           
           <label htmlFor="warehouse-height" className="mr-2">Grid Height:</label>
@@ -97,38 +147,42 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             min={5} 
             max={50}
             onChange={(e) => onHeightChange(parseInt(e.target.value))}
+            disabled={isPresetLoaded}
           />
         </div>
         <button 
           id="init-warehouse-btn" 
-          className="w-full mt-2 bg-blue-700 text-white rounded py-2 px-4 hover:bg-blue-800 transition-colors"
+          className={`w-full mt-2 text-white rounded py-2 px-4 transition-colors ${isPresetLoaded ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-700 hover:bg-blue-800'}`}
           onClick={onInitializeWarehouse}
+          disabled={isPresetLoaded}
         >
           Initialize Warehouse
         </button>
       </div>
 
-      <div className="bg-gray-50 rounded-lg p-4 mb-4 shadow-sm">
+      <div className={`bg-gray-50 rounded-lg p-4 mb-4 shadow-sm ${isPresetLoaded ? 'opacity-50 cursor-not-allowed' : ''}`}>
         <h2 className="text-lg font-semibold mb-3 pb-2 border-b-2 border-blue-100 text-blue-700">Navigation Points</h2>
         <div className="grid grid-cols-2 gap-2">
           <button 
             id="set-start-btn" 
-            className="bg-green-600 text-white rounded py-2 px-4 hover:bg-green-700 transition-colors"
+            className={`text-white rounded py-2 px-4 transition-colors ${isPresetLoaded ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}`}
             onClick={onSetStart}
+            disabled={isPresetLoaded}
           >
             Set Robot Start
           </button>
           <button 
             id="set-end-btn" 
-            className="bg-red-600 text-white rounded py-2 px-4 hover:bg-red-700 transition-colors"
+            className={`text-white rounded py-2 px-4 transition-colors ${isPresetLoaded ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
             onClick={onSetEnd}
+            disabled={isPresetLoaded}
           >
             Set Destination
           </button>
         </div>
       </div>
 
-      <div className="bg-gray-50 rounded-lg p-4 mb-4 shadow-sm">
+      <div className={`bg-gray-50 rounded-lg p-4 mb-4 shadow-sm ${isPresetLoaded ? 'opacity-50 cursor-not-allowed' : ''}`}>
         <h2 className="text-lg font-semibold mb-3 pb-2 border-b-2 border-blue-100 text-blue-700">Obstacle Management</h2>
         <div className="mb-3">
           <label htmlFor="obstacle-type" className="block mb-2">Obstacle Type:</label>
@@ -136,6 +190,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             id="obstacle-type" 
             className="w-full p-2 border border-gray-300 rounded mb-2"
             onChange={(e) => onObstacleTypeChange(e.target.value)}
+            disabled={isPresetLoaded}
           >
             {obstacleTypes.map(type => (
               <option key={type.value} value={type.value}>{type.label}</option>
@@ -145,15 +200,17 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         <div className="grid grid-cols-1 gap-2">
           <button 
             id="toggle-obstacle-btn" 
-            className="bg-blue-500 text-white rounded py-2 px-4 hover:bg-blue-600 transition-colors"
+            className={`text-white rounded py-2 px-4 transition-colors ${isPresetLoaded ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'}`}
             onClick={onToggleObstacle}
+            disabled={isPresetLoaded}
           >
             Place/Remove Obstacle
           </button>
           <button 
             id="multi-grid-obstacle-btn" 
-            className="bg-orange-500 text-white rounded py-2 px-4 hover:bg-orange-600 transition-colors font-bold border-2 border-dashed border-orange-800"
+            className={`text-white rounded py-2 px-4 font-bold border-2 border-dashed transition-colors ${isPresetLoaded ? 'bg-gray-400 border-gray-500 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600 border-orange-800'}`}
             onClick={onPlaceMultiGrid}
+            disabled={isPresetLoaded}
           >
             Place Larger Obstacle
           </button>

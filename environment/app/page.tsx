@@ -5,10 +5,87 @@ import WarehouseCanvas from '../components/WarehouseCanvas';
 import ControlPanel from '../components/ControlPanel';
 import { WarehouseState, Point, MultiGridObstacle, ObstacleTemplate } from '../types/types';
 
+// Define a type for our preset environments
+interface PresetEnvironment {
+  name: string;
+  warehouseWidth: number;
+  warehouseHeight: number;
+  startPoint: Point;
+  endPoint: Point;
+  robotPosition: Point;
+  multiGridObstacles: MultiGridObstacle[];
+}
+
+const PREDEFINED_ENVIRONMENTS: PresetEnvironment[] = [
+  {
+    name: "Amazon Fulfilment Center 1",
+    warehouseWidth: 30,
+    warehouseHeight: 20,
+    startPoint: { x: 1, y: 1 },
+    endPoint: { x: 28, y: 18 },
+    robotPosition: { x: 1, y: 1 },
+    multiGridObstacles: [
+      { x: 0, y: 5, width: 1, height: 10, type: 'wall', sprite: '/sprites/wall.png' }, // Left boundary wall
+      { x: 29, y: 5, width: 1, height: 10, type: 'wall', sprite: '/sprites/wall.png' }, // Right boundary wall
+      { x: 5, y: 0, width: 10, height: 1, type: 'wall', sprite: '/sprites/wall.png' }, // Top boundary wall
+      { x: 5, y: 19, width: 10, height: 1, type: 'wall', sprite: '/sprites/wall.png' }, // Bottom boundary wall
+
+      { x: 5, y: 2, width: 2, height: 5, type: 'shelf', sprite: '/sprites/wall.png' }, // Shelf unit (using wall sprite)
+      { x: 8, y: 2, width: 2, height: 5, type: 'shelf', sprite: '/sprites/wall.png' },
+      
+      { x: 12, y: 8, width: 3, height: 3, type: 'box', sprite: '/sprites/box.png' },    // Large stack of boxes
+      { x: 16, y: 8, width: 1, height: 1, type: 'human', sprite: '/sprites/human.png' }, // Human worker
+      { x: 18, y: 12, width: 1, height: 1, type: 'box', sprite: '/sprites/box.png' },    // Single box
+
+      { x: 22, y: 5, width: 1, height: 4, type: 'shelf', sprite: '/sprites/wall.png' }, // Tall narrow shelf
+      { x: 25, y: 15, width: 3, height: 1, type: 'box', sprite: '/sprites/box.png' },   // Row of boxes
+    ],
+  },
+  {
+    name: "Nvidia GPU Farm",
+    warehouseWidth: 25,
+    warehouseHeight: 25,
+    startPoint: { x: 0, y: 0 },
+    endPoint: { x: 24, y: 24 },
+    robotPosition: { x: 0, y: 0 },
+    multiGridObstacles: [
+      { x: 5, y: 5, width: 2, height: 7, type: 'restricted', sprite: '/sprites/wall.png' }, // Server rack area
+      { x: 5, y: 15, width: 2, height: 7, type: 'restricted', sprite: '/sprites/wall.png' },
+      { x: 10, y: 5, width: 2, height: 7, type: 'restricted', sprite: '/sprites/wall.png' },
+      { x: 10, y: 15, width: 2, height: 7, type: 'restricted', sprite: '/sprites/wall.png' },
+      
+      { x: 15, y: 8, width: 1, height: 1, type: 'human', sprite: '/sprites/human.png' },  // Technician
+      { x: 18, y: 18, width: 3, height: 3, type: 'box', sprite: '/sprites/box.png' },    // Shipment of GPUs
+      { x: 2, y: 10, width: 1, height: 1, type: 'box', sprite: '/sprites/box.png' },
+      { x: 20, y: 2, width: 4, height: 1, type: 'wall', sprite: '/sprites/wall.png' },   // Cable run / conduit
+    ],
+  },
+  {
+    name: "Tesla Gigafactory 2",
+    warehouseWidth: 40,
+    warehouseHeight: 30,
+    startPoint: { x: 2, y: 2 },
+    endPoint: { x: 38, y: 28 },
+    robotPosition: { x: 2, y: 2 },
+    multiGridObstacles: [
+      { x: 5, y: 5, width: 1, height: 20, type: 'wall', sprite: '/sprites/wall.png' },  // Long assembly line wall
+      { x: 15, y: 10, width: 10, height: 2, type: 'shelf', sprite: '/sprites/wall.png' }, // Parts storage shelf
+      { x: 15, y: 15, width: 10, height: 2, type: 'shelf', sprite: '/sprites/wall.png' },
+      
+      { x: 30, y: 5, width: 5, height: 5, type: 'restricted', sprite: '/sprites/wall.png' }, // Battery assembly area
+      { x: 32, y: 8, width: 1, height: 1, type: 'human', sprite: '/sprites/human.png' },     // Worker in area
+
+      { x: 8, y: 25, width: 3, height: 3, type: 'box', sprite: '/sprites/box.png' },     // Crate of components
+      { x: 25, y: 25, width: 1, height: 1, type: 'human', sprite: '/sprites/human.png' },  // Inspector
+      { x: 20, y: 3, width: 1, height: 1, type: 'box', sprite: '/sprites/box.png' },
+    ],
+  },
+];
+
 export default function Home() {
   // Constants
   const BASE_API_URL = '/api';
-  const cellSize = 25;
+  const cellSize = 35;
   
   // Obstacle templates for multi-grid obstacles
   const obstacleTemplates: Record<string, ObstacleTemplate> = {
@@ -67,6 +144,7 @@ export default function Home() {
   const [statusLog, setStatusLog] = useState<{ message: string; type: 'info' | 'success' | 'error' }[]>([]);
   const [animationFrame, setAnimationFrame] = useState<number | null>(null);
   const [selectedObstacleType, setSelectedObstacleType] = useState<string>('crate');
+  const [selectedPreset, setSelectedPreset] = useState<string>(''); // Added for preset selection
   
   // Helper function to update status message
   const updateStatusMessage = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
@@ -82,9 +160,9 @@ export default function Home() {
   };
 
   // Initialize warehouse
-  const initializeWarehouse = async () => {
-    const w = warehouseState.warehouseWidth;
-    const h = warehouseState.warehouseHeight;
+  const initializeWarehouse = async (width?: number, height?: number) => {
+    const w = width ?? warehouseState.warehouseWidth;
+    const h = height ?? warehouseState.warehouseHeight;
     
     if (w <= 0 || h <= 0) {
       updateStatusMessage("Valid positive integers required for width and height.", 'error');
@@ -132,21 +210,37 @@ export default function Home() {
 
   // Set mode functions
   const setStartMode = () => {
+    if (selectedPreset) {
+      updateStatusMessage("Modifying start point is disabled when a preset is loaded. Clear simulation to customize.", 'error');
+      return;
+    }
     setWarehouseState((prev: WarehouseState) => ({ ...prev, currentMode: 'set_start' }));
     updateStatusMessage("Click on the grid to set robot start position.", 'info');
   };
   
   const setEndMode = () => {
+    if (selectedPreset) {
+      updateStatusMessage("Modifying end point is disabled when a preset is loaded. Clear simulation to customize.", 'error');
+      return;
+    }
     setWarehouseState((prev: WarehouseState) => ({ ...prev, currentMode: 'set_end' }));
     updateStatusMessage("Click on the grid to set destination point.", 'info');
   };
   
   const setToggleObstacleMode = () => {
+    if (selectedPreset) {
+      updateStatusMessage("Modifying obstacles is disabled when a preset is loaded. Clear simulation to customize.", 'error');
+      return;
+    }
     setWarehouseState((prev: WarehouseState) => ({ ...prev, currentMode: 'toggle_obstacle' }));
     updateStatusMessage("Click on grid cells to place or remove obstacles.", 'info');
   };
   
   const setPlaceMultiGridMode = () => {
+    if (selectedPreset) {
+      updateStatusMessage("Modifying obstacles is disabled when a preset is loaded. Clear simulation to customize.", 'error');
+      return;
+    }
     setWarehouseState((prev: WarehouseState) => ({ ...prev, currentMode: 'place_multi_grid' }));
     updateStatusMessage("Click on the grid to place a multi-grid obstacle. Will use the selected obstacle type.", 'info');
   };
@@ -487,6 +581,104 @@ export default function Home() {
     setAnimationFrame(frameId);
   };
 
+  // Load a predefined environment
+  const loadPresetEnvironment = async (presetName: string) => {
+    const preset = PREDEFINED_ENVIRONMENTS.find(p => p.name === presetName);
+    if (!preset) {
+      updateStatusMessage(`Preset environment "${presetName}" not found.`, 'error');
+      return;
+    }
+
+    updateStatusMessage(`Loading preset: ${preset.name}...`, 'info');
+    setSelectedPreset(preset.name);
+
+    // Temporarily set state for initialization call
+    setWarehouseState(prev => ({
+      ...prev,
+      warehouseWidth: preset.warehouseWidth,
+      warehouseHeight: preset.warehouseHeight,
+      startPoint: preset.startPoint,
+      endPoint: preset.endPoint,
+      robotPosition: preset.robotPosition,
+      multiGridObstacles: preset.multiGridObstacles,
+      obstacles: new Set<string>(), // Clear local obstacles, will be repopulated
+      currentPath: [],
+      animationInProgress: false,
+      currentMode: 'none',
+    }));
+
+    // 1. Initialize the backend warehouse with new dimensions (this should clear backend obstacles)
+    try {
+      const initResponse = await fetch(`${BASE_API_URL}/initialize_warehouse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ width: preset.warehouseWidth, height: preset.warehouseHeight })
+      });
+      if (!initResponse.ok) {
+        const errorData = await initResponse.json();
+        throw new Error(errorData.error || `HTTP error! Status: ${initResponse.status}`);
+      }
+      const initData = await initResponse.json();
+      updateStatusMessage(initData.message || `Warehouse for ${preset.name} initialized.`, 'info');
+
+      // Backend obstacles are now clear.
+      // Create a new Set for the frontend's 'obstacles' based on the preset's multiGridObstacles
+      const newBackendObstaclesSet = new Set<string>();
+      for (const obstacle of preset.multiGridObstacles) {
+        for (let i = 0; i < obstacle.width; i++) {
+          for (let j = 0; j < obstacle.height; j++) {
+            const obsX = obstacle.x + i;
+            const obsY = obstacle.y + j;
+            newBackendObstaclesSet.add(`${obsX},${obsY}`);
+          }
+        }
+      }
+      
+      // Update the state fully now, including the correctly populated 'obstacles' set
+      setWarehouseState(prev => ({
+        ...prev, // Keep width, height, start, end, robotPos, multiGrid from above
+        warehouseWidth: preset.warehouseWidth,
+        warehouseHeight: preset.warehouseHeight,
+        startPoint: preset.startPoint,
+        endPoint: preset.endPoint,
+        robotPosition: preset.robotPosition,
+        multiGridObstacles: preset.multiGridObstacles,
+        obstacles: newBackendObstaclesSet, // Set the frontend obstacles based on multiGrid
+        currentPath: [],
+        animationInProgress: false,
+        currentMode: 'none',
+      }));
+
+      // 2. Add obstacles to the backend
+      // We need to ensure this happens *after* the state is updated with newBackendObstaclesSet if any checks rely on it.
+      // However, the backend takes individual obstacle cells.
+      for (const obsKey of Array.from(newBackendObstaclesSet)) {
+        const [xStr, yStr] = obsKey.split(',');
+        const x = parseInt(xStr, 10);
+        const y = parseInt(yStr, 10);
+        try {
+          const obsResponse = await fetch(`${BASE_API_URL}/obstacle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ x, y })
+          });
+          if (!obsResponse.ok) {
+            const errorData = await obsResponse.json();
+            console.warn(`Failed to add obstacle at (${x},${y}) for preset: ${errorData.error || obsResponse.status}`);
+          }
+        } catch (error) {
+          console.warn(`Error adding obstacle at (${x},${y}) for preset: ${error}`);
+        }
+      }
+      updateStatusMessage(`${preset.name} loaded and obstacles configured. Ready to find path.`, 'success');
+
+    } catch (error) {
+      console.error("Error loading preset environment:", error);
+      updateStatusMessage(`Failed to load preset: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+      setSelectedPreset(''); // Reset on error
+    }
+  };
+
   // Clear simulation
   const clearSimulation = async () => {
     const { warehouseWidth, warehouseHeight } = warehouseState;
@@ -524,8 +716,9 @@ export default function Home() {
       currentMode: 'none',
       animationInProgress: false
     }));
-    
-    updateStatusMessage("Simulation reset. Initialize warehouse if needed.", 'info');
+    setSelectedPreset(''); // Also clear selected preset
+
+    updateStatusMessage("Simulation reset. Initialize warehouse or load a preset.", 'info');
   };
 
   // Handle width and height changes
@@ -544,7 +737,10 @@ export default function Home() {
 
   // Initial setup
   useEffect(() => {
-    updateStatusMessage("System ready. Please initialize warehouse dimensions.", 'info');
+    // updateStatusMessage("System ready. Please initialize warehouse dimensions.", 'info');
+    // Let's try to load a default preset, or prompt user to select one.
+    // For now, just update message.
+    updateStatusMessage("System ready. Please load a preset environment or initialize manually.", 'info');
   }, []);
 
   // Clean up on unmount
@@ -568,15 +764,36 @@ export default function Home() {
         statusType={statusType}
         statusLog={statusLog}
         obstacleTypes={obstacleTypes}
-        onInitializeWarehouse={initializeWarehouse}
+        predefinedEnvironments={PREDEFINED_ENVIRONMENTS.map(p => p.name)}
+        selectedPreset={selectedPreset}
+        onLoadPreset={loadPresetEnvironment}
+        onInitializeWarehouse={() => {
+          if (selectedPreset) {
+            updateStatusMessage("Warehouse already initialized by preset. Clear simulation to re-initialize manually.", 'error');
+            return;
+          }
+          initializeWarehouse();
+        }}
         onSetStart={setStartMode}
         onSetEnd={setEndMode}
         onToggleObstacle={setToggleObstacleMode}
         onPlaceMultiGrid={setPlaceMultiGridMode}
         onFindPath={findPath}
         onClearSimulation={clearSimulation}
-        onWidthChange={handleWidthChange}
-        onHeightChange={handleHeightChange}
+        onWidthChange={(width: number) => {
+          if (selectedPreset) {
+             updateStatusMessage("Dimensions are fixed for presets. Clear simulation to change.", 'error');
+            return;
+          }
+          handleWidthChange(width);
+        }}
+        onHeightChange={(height: number) => {
+           if (selectedPreset) {
+             updateStatusMessage("Dimensions are fixed for presets. Clear simulation to change.", 'error');
+            return;
+          }
+          handleHeightChange(height);
+        }}
         onObstacleTypeChange={handleObstacleTypeChange}
       />
     </div>

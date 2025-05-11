@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:5000/api/:path*' // Proxy to the backend Flask server
+        destination: 'http://127.0.0.1:5000/api/:path*' // Explicitly use IPv4 instead of localhost
       }
     ]
   }

@@ -9,6 +9,7 @@ export interface MultiGridObstacle {
   width: number;
   height: number;
   type: string;
+  sprite?: string;
 }
 
 export interface WarehouseState {

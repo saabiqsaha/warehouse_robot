@@ -1,12 +1,26 @@
 'use client';
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { WarehouseState, Point, MultiGridObstacle } from '../types/types';
 
 interface WarehouseCanvasProps {
   warehouseState: WarehouseState;
   onCanvasClick: (gridX: number, gridY: number) => void;
 }
+
+// Define paths for our sprites
+const SPRITE_PATHS: Record<string, string> = {
+  robot: '/sprites/robot.png',
+  destination: '/sprites/destination.png',
+  box: '/sprites/box.png',
+  human: '/sprites/human.png',
+  wall: '/sprites/wall.png',
+  // Add other types if they have dedicated sprites (e.g., shelf, crate)
+  // If not, they will use the fallback color drawing.
+  // For preset obstacles like 'shelf' or 'restricted' that were assigned '/sprites/wall.png',
+  // that mapping happens in page.tsx's PREDEFINED_ENVIRONMENTS.
+  // Here, we only care about the actual sprite files.
+};
 
 const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
   warehouseState,
@@ -17,7 +31,7 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
     warehouseWidth, 
     warehouseHeight, 
     cellSize, 
-    obstacles, 
+    // obstacles, // This Set<string> might become less relevant if MultiGridObstacles cover all.
     multiGridObstacles,
     startPoint, 
     endPoint, 
@@ -25,83 +39,97 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
     robotPosition 
   } = warehouseState;
 
-  // Colors for drawing
+  const [loadedImages, setLoadedImages] = useState<Record<string, HTMLImageElement>>({});
+  const [imagesLoaded, setImagesLoaded] = useState(false);
+
+  // Colors for drawing (kept for fallbacks and other elements)
   const colors = {
-    gridLines: '#e0e0e0', // Lighter grey for grid lines
+    gridLines: '#e0e0e0',
     text: '#333333',
-    floor: '#f5f5f5', // Light grey floor
-    // Obstacle type colors (as fallbacks if images don't load)
-    obstacle: { // Default obstacle color if not specified by type
-      crate: '#78909c',   // Blue Grey (like a metal crate)
-      shelf: '#546e7a',   // Darker Blue Grey (like a shelf unit)
-      restricted: '#ef5350', // Muted Red (for restricted zone)
-      default: '#607d8b'  // Default if type unknown
+    floor: '#f5f5f5',
+    obstacle: { 
+      crate: '#78909c',
+      shelf: '#546e7a',
+      restricted: '#ef5350',
+      default: '#607d8b',
+      // Add our new types for color fallbacks if sprites fail or are not defined for a type
+      box: '#a1887f', // Brown for box
+      human: '#ffb74d', // Orange for human
+      wall: '#bdbdbd',  // Grey for wall
     },
-    startPoint: '#4CAF50', // Green
-    endPoint: '#f44336',   // Red
-    path: '#64b5f6',       // Lighter blue for path
-    pathHighlight: '#2196f3', // Brighter blue for current segment
-    robot: '#ff9800',      // Orange (common for robots/highlight)
-    // Status message colors
+    startPoint: '#4CAF50', // Kept for potential fallback if robot sprite fails at start
+    endPoint: '#f44336',   // Kept for potential fallback if destination sprite fails
+    path: '#64b5f6',
+    pathHighlight: '#2196f3',
+    robot: '#ff9800',      // Fallback robot color
     status: {
       success: '#28a745',
       error: '#dc3545',
-      info: '#007bff' // Can use accent for general info
+      info: '#007bff'
     }
   };
 
-  // Image refs
-  const robotImgRef = useRef<HTMLImageElement | null>(null);
-  const obstacleImagesRef = useRef<Record<string, HTMLImageElement>>({});
-  const startFlagRef = useRef<HTMLImageElement | null>(null);
-  const endFlagRef = useRef<HTMLImageElement | null>(null);
-
-  // Initialize images on component mount
+  // Load images
   useEffect(() => {
-    // Import dynamic image creation functions
-    const importImageGenerators = async () => {
-      const { createRobotImage, createObstacleImages, createFlagImages } = await import('../utils/imageGenerator');
-      
-      // Create robot image
-      const robotImg = new Image();
-      robotImg.src = createRobotImage();
-      robotImgRef.current = robotImg;
-      
-      // Create obstacle images
-      const obstacleImageSrcs = createObstacleImages();
-      const obstacleImages: Record<string, HTMLImageElement> = {};
-      
-      for (const type in obstacleImageSrcs) {
-        const img = new Image();
-        img.src = obstacleImageSrcs[type];
-        obstacleImages[type] = img;
+    const images: Record<string, HTMLImageElement> = {};
+    const spriteKeys = Object.keys(SPRITE_PATHS);
+    let imagesToLoadCount = spriteKeys.length;
+
+    if (imagesToLoadCount === 0) {
+      setImagesLoaded(true);
+      return;
+    }
+
+    const onImageLoadOrError = () => {
+      imagesToLoadCount--;
+      if (imagesToLoadCount === 0) {
+        setLoadedImages(images);
+        setImagesLoaded(true);
+        // Force a redraw if canvas is already initialized
+        // This ensures that if images load after the initial paint, the canvas updates.
+        const canvas = canvasRef.current;
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            if (ctx && warehouseWidth > 0 && warehouseHeight > 0) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                // It is generally better to rely on the main redraw useEffect triggered by imagesLoaded state change.
+                // However, explicitly calling drawAll here can make the update appear faster in some scenarios.
+                // Make sure drawAll is defined/hoisted if called here.
+                 const tempDrawAll = (context: CanvasRenderingContext2D) => { // Temporarily define for this scope if needed
+                    drawGrid(context);
+                    drawPath(context);
+                    drawObstacles(context);
+                    drawStartPoint(context);
+                    drawEndPoint(context);
+                    drawRobot(context);
+                };
+                tempDrawAll(ctx);
+            }
+        }
       }
-      obstacleImagesRef.current = obstacleImages;
-      
-      // Create flag images
-      const flagImageSrcs = createFlagImages();
-      
-      const startFlag = new Image();
-      startFlag.src = flagImageSrcs.start;
-      startFlagRef.current = startFlag;
-      
-      const endFlag = new Image();
-      endFlag.src = flagImageSrcs.end;
-      endFlagRef.current = endFlag;
     };
-    
-    importImageGenerators();
-  }, []);
+
+    spriteKeys.forEach(key => {
+      images[key] = new Image();
+      images[key].onload = onImageLoadOrError;
+      images[key].onerror = () => {
+        console.error(`Failed to load sprite: ${SPRITE_PATHS[key]}`);
+        onImageLoadOrError(); // Decrement count even on error
+      };
+      images[key].src = SPRITE_PATHS[key];
+    });
+  // drawAll dependency will be handled by the main redraw useEffect
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Changed dependency array to [] for mount-only image loading
+
 
   // Draw functions
   const drawGrid = (ctx: CanvasRenderingContext2D) => {
     if (warehouseWidth === 0 || warehouseHeight === 0) return;
     
-    // Draw floor background
     ctx.fillStyle = colors.floor;
     ctx.fillRect(0, 0, warehouseWidth * cellSize, warehouseHeight * cellSize);
 
-    // Draw grid lines
     ctx.strokeStyle = colors.gridLines;
     ctx.lineWidth = 1;
 
@@ -119,180 +147,125 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
     }
   };
 
-  const drawCell = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, isObstacle = false) => {
+  const drawCellFallback = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string) => {
     if (x < 0 || x >= warehouseWidth || y < 0 || y >= warehouseHeight) return;
     ctx.fillStyle = color;
-    if (isObstacle) {
-      // Slightly inset obstacles for a cleaner look
-      ctx.fillRect(x * cellSize + 2, y * cellSize + 2, cellSize - 4, cellSize - 4);
-    } else {
-      ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, cellSize - 2);
-    }
+    ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, cellSize - 2);
   };
-
+  
   const drawObstacles = (ctx: CanvasRenderingContext2D) => {
-    // Get the current selected obstacle type
-    const obstacleTypeSelect = document.getElementById('obstacle-type') as HTMLSelectElement;
-    const currentSelectedType = obstacleTypeSelect?.value || 'crate';
-    
-    // Draw regular single-cell obstacles
-    obstacles.forEach(obsDataString => {
-      const [xStr, yStr] = obsDataString.split(',');
-      const x = parseInt(xStr);
-      const y = parseInt(yStr);
-      
-      // Try to draw image first
-      const obstacleImages = obstacleImagesRef.current;
-      const img = obstacleImages[currentSelectedType];
-      
-      if (img && img.complete && img.naturalHeight !== 0) {
-        ctx.drawImage(
-          img,
-          x * cellSize + 2,
-          y * cellSize + 2,
-          cellSize - 4,
-          cellSize - 4
-        );
-      } else {
-        // Fallback to color rectangle
-        const obstacleColor = colors.obstacle[currentSelectedType as keyof typeof colors.obstacle] || colors.obstacle.default;
-        drawCell(ctx, x, y, obstacleColor, true);
-      }
-    });
-
-    // Draw multi-grid obstacles
     multiGridObstacles.forEach(obstacle => {
-      const { x, y, width, height, type } = obstacle;
-      
-      // Draw a combined rectangle for the multi-grid obstacle
-      ctx.fillStyle = colors.obstacle[type as keyof typeof colors.obstacle] || colors.obstacle.default;
-      ctx.fillRect(
-        x * cellSize + 2,
-        y * cellSize + 2,
-        width * cellSize - 4,
-        height * cellSize - 4
-      );
-      
-      // Try to draw image with proper stretching
-      const obstacleImages = obstacleImagesRef.current;
-      const img = obstacleImages[type];
-      
-      if (img && img.complete && img.naturalHeight !== 0) {
-        ctx.drawImage(
-          img,
-          x * cellSize + 4,
-          y * cellSize + 4,
-          width * cellSize - 8,
-          height * cellSize - 8
+      const { x, y, width, height, type, sprite } = obstacle;
+      let drawnWithSprite = false;
+      let spriteUsedKey: string | undefined = undefined;
+
+      if (sprite) {
+        const spriteKey = Object.keys(SPRITE_PATHS).find(key => SPRITE_PATHS[key] === sprite);
+        if (spriteKey) {
+            spriteUsedKey = spriteKey;
+            const img = loadedImages[spriteKey];
+            if (img && img.complete && img.naturalHeight !== 0) {
+            try {
+                ctx.drawImage(
+                img,
+                x * cellSize,
+                y * cellSize,
+                width * cellSize,
+                height * cellSize
+                );
+                drawnWithSprite = true;
+            } catch (e) {
+                console.error("Error drawing image:", sprite, e);
+            }
+            }
+        }
+      }
+
+      if (!drawnWithSprite) {
+        const obstacleColor = colors.obstacle[type as keyof typeof colors.obstacle] || colors.obstacle.default;
+        ctx.fillStyle = obstacleColor;
+        ctx.fillRect(
+          x * cellSize + 1,
+          y * cellSize + 1,
+          width * cellSize - 2,
+          height * cellSize - 2
         );
       }
-      
-      // Add some details/shading to make it look 3D
-      ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(
-        x * cellSize + 4,
-        y * cellSize + 4,
-        width * cellSize - 8,
-        height * cellSize - 8
-      );
-      
-      // Add text label
-      ctx.fillStyle = '#fff';
-      ctx.font = `${cellSize/3}px Arial`;
+
+      // Always draw label, adjust color based on if sprite was drawn
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      const labelX = (x + width / 2) * cellSize;
+      const labelY = (y + height / 2) * cellSize;
       
-      let label = '';
-      switch(type) {
-        case 'shelf':
-          label = width > 1 ? 'Shelf Unit' : 'Shelf';
-          break;
-        case 'crate':
-          label = width > 1 ? 'Crates' : 'Crate';
-          break;
-        case 'restricted':
-          label = 'Restricted';
-          break;
-        default:
-          label = 'Obstacle';
+      let label = type.charAt(0).toUpperCase() + type.slice(1);
+      const fontSize = Math.min(Math.max(width * cellSize / label.length, height * cellSize / 3), cellSize / 2.5, 12 ); // Dynamic font size
+      ctx.font = `bold ${fontSize}px Arial`;
+
+      if (drawnWithSprite && (spriteUsedKey === 'wall' || spriteUsedKey === 'shelf' || spriteUsedKey === 'restricted')) {
+        // For dark sprites like walls/shelves, use light text
+        ctx.fillStyle = '#FFFFFF'; // White text
+        // Optionally add a slight shadow or outline for better readability on complex sprites
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 0.5;
+        ctx.strokeText(label, labelX, labelY);
+      } else if (drawnWithSprite) {
+        ctx.fillStyle = '#000000'; // Black text for lighter sprites (box, human)
+      } else {
+        ctx.fillStyle = '#FFFFFF'; // White text for colored fallback blocks
       }
-      
-      ctx.fillText(
-        label,
-        (x + width/2) * cellSize,
-        (y + height/2) * cellSize
-      );
+      ctx.fillText(label, labelX, labelY);
     });
   };
 
   const drawStartPoint = (ctx: CanvasRenderingContext2D) => {
+    // Start point is primarily indicated by the robot's initial position.
+    // If a distinct visual marker for the start cell itself is needed (even when robot moves),
+    // it could be drawn here. For now, robot drawing handles the initial state.
     if (startPoint) {
-      const startFlag = startFlagRef.current;
-      
-      if (startFlag && startFlag.complete && startFlag.naturalHeight !== 0) {
-        ctx.drawImage(
-          startFlag,
-          startPoint.x * cellSize + 2,
-          startPoint.y * cellSize + 2,
-          cellSize - 4,
-          cellSize - 4
-        );
-      } else {
-        // Fallback to color
-        drawCell(ctx, startPoint.x, startPoint.y, colors.startPoint);
-        
-        // Draw 'S' text
-        ctx.fillStyle = '#fff';
-        ctx.font = `bold ${cellSize/2}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(
-          'S',
-          startPoint.x * cellSize + cellSize/2,
-          startPoint.y * cellSize + cellSize/2
-        );
-      }
+        // Optionally, draw a subtle marker if robot is not at startPoint but path planning has occurred.
+        // For simplicity, if robot is at startPoint, its sprite is enough.
+        // If we want a permanent 'S' or different flag even when robot moves away:
+        // const robotIsAtStart = robotPosition && robotPosition.x === startPoint.x && robotPosition.y === startPoint.y;
+        // if (!robotIsAtStart) { ... draw a static start marker ... }
     }
   };
 
   const drawEndPoint = (ctx: CanvasRenderingContext2D) => {
     if (endPoint) {
-      const endFlag = endFlagRef.current;
-      
-      if (endFlag && endFlag.complete && endFlag.naturalHeight !== 0) {
+      const img = loadedImages['destination'];
+      if (img && img.complete && img.naturalHeight !== 0) {
         ctx.drawImage(
-          endFlag,
-          endPoint.x * cellSize + 2,
-          endPoint.y * cellSize + 2,
-          cellSize - 4,
-          cellSize - 4
+          img,
+          endPoint.x * cellSize,
+          endPoint.y * cellSize,
+          cellSize,
+          cellSize
         );
+        // Add label to destination sprite
+        ctx.fillStyle = '#FFFFFF'; // White text
+        ctx.font = `bold ${cellSize / 3}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom'; // Position below the center of the sprite
+        ctx.fillText('End', endPoint.x * cellSize + cellSize / 2, endPoint.y * cellSize + cellSize - 2);
+
       } else {
-        // Fallback to color
-        drawCell(ctx, endPoint.x, endPoint.y, colors.endPoint);
-        
-        // Draw 'E' text
+        // Fallback to color and text
+        drawCellFallback(ctx, endPoint.x, endPoint.y, colors.endPoint);
         ctx.fillStyle = '#fff';
-        ctx.font = `bold ${cellSize/2}px Arial`;
+        ctx.font = `bold ${cellSize / 2}px Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(
-          'E',
-          endPoint.x * cellSize + cellSize/2,
-          endPoint.y * cellSize + cellSize/2
-        );
+        ctx.fillText('E', endPoint.x * cellSize + cellSize / 2, endPoint.y * cellSize + cellSize / 2);
       }
     }
   };
 
   const drawPath = (ctx: CanvasRenderingContext2D) => {
     if (currentPath.length > 0) {
-      // Draw path background
       ctx.strokeStyle = colors.path;
       ctx.lineWidth = Math.max(2, cellSize / 6);
       ctx.beginPath();
-      
       currentPath.forEach((p, index) => {
         const centerX = p.x * cellSize + cellSize / 2;
         const centerY = p.y * cellSize + cellSize / 2;
@@ -304,12 +277,10 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
       });
       ctx.stroke();
       
-      // Draw path dots at each cell center
       currentPath.forEach((p, index) => {
-        if (index > 0 && index < currentPath.length - 1) { // Skip start/end points
+        if (index > 0 && index < currentPath.length - 1) {
           const centerX = p.x * cellSize + cellSize / 2;
           const centerY = p.y * cellSize + cellSize / 2;
-          
           ctx.fillStyle = colors.pathHighlight;
           ctx.beginPath();
           ctx.arc(centerX, centerY, cellSize / 12, 0, Math.PI * 2);
@@ -321,68 +292,55 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
 
   const drawRobot = (ctx: CanvasRenderingContext2D) => {
     if (robotPosition) {
-      const centerX = robotPosition.x * cellSize + cellSize / 2;
-      const centerY = robotPosition.y * cellSize + cellSize / 2;
-      
-      const robotImg = robotImgRef.current;
-      if (robotImg && robotImg.complete && robotImg.naturalHeight !== 0) {
-        // Calculate size based on cell size
-        const robotSize = cellSize * 0.8;
-        
-        // Calculate position to center in cell
-        const robotX = centerX - robotSize/2;
-        const robotY = centerY - robotSize/2;
-        
-        ctx.drawImage(robotImg, robotX, robotY, robotSize, robotSize);
+      const img = loadedImages['robot'];
+      if (img && img.complete && img.naturalHeight !== 0) {
+        ctx.drawImage(
+          img,
+          robotPosition.x * cellSize,
+          robotPosition.y * cellSize,
+          cellSize,
+          cellSize
+        );
+        // Optionally add a label to the robot, e.g., its coordinates or just "Robot"
+        // ctx.fillStyle = '#000000';
+        // ctx.font = `bold ${cellSize / 4}px Arial`;
+        // ctx.textAlign = 'center';
+        // ctx.textBaseline = 'top';
+        // ctx.fillText(`R`, robotPosition.x * cellSize + cellSize / 2, robotPosition.y * cellSize + cellSize + 2);
+
       } else {
         // Fallback to circle robot
+        const centerX = robotPosition.x * cellSize + cellSize / 2;
+        const centerY = robotPosition.y * cellSize + cellSize / 2;
         const radius = cellSize / 2.5;
-        
         ctx.beginPath();
         ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI, false);
         ctx.fillStyle = colors.robot;
         ctx.fill();
-        
-        // Add details to robot
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, radius * 0.7, 0, Math.PI * 2);
+        // Simple 'R' for fallback
         ctx.fillStyle = '#fff';
-        ctx.fill();
-        
-        // Add "eyes"
-        ctx.beginPath();
-        ctx.arc(centerX - radius * 0.3, centerY - radius * 0.2, radius * 0.15, 0, Math.PI * 2);
-        ctx.fillStyle = '#333';
-        ctx.fill();
-        
-        ctx.beginPath();
-        ctx.arc(centerX + radius * 0.3, centerY - radius * 0.2, radius * 0.15, 0, Math.PI * 2);
-        ctx.fillStyle = '#333';
-        ctx.fill();
-        
-        // Add directional indicator
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = '#333';
-        ctx.beginPath();
-        ctx.arc(centerX, centerY + radius * 0.2, radius * 0.4, 0.1 * Math.PI, 0.9 * Math.PI, false);
-        ctx.stroke();
+        ctx.font = `bold ${cellSize / 2}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('R', centerX, centerY);
       }
     }
   };
 
+  // Define drawAll here or ensure it's hoisted/available for the image loading useEffect
   const drawAll = (ctx: CanvasRenderingContext2D) => {
     drawGrid(ctx);
     drawPath(ctx);
-    drawObstacles(ctx);
-    drawStartPoint(ctx);
+    drawObstacles(ctx); // Should be drawn before robot/destination if they can overlap
+    drawStartPoint(ctx); // Mostly for semantic clarity, actual rendering is robot at start
     drawEndPoint(ctx);
     drawRobot(ctx);
   };
-
-  // Redraw canvas whenever any of the dependencies change
+  
+  // Main redraw effect
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !imagesLoaded) return; // Don't draw until images are processed
     
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -390,9 +348,17 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
     if (warehouseWidth > 0 && warehouseHeight > 0) {
       canvas.width = warehouseWidth * cellSize;
       canvas.height = warehouseHeight * cellSize;
+      ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear before drawing
       drawAll(ctx);
     }
-  }, [warehouseWidth, warehouseHeight, cellSize, obstacles, multiGridObstacles, startPoint, endPoint, currentPath, robotPosition]);
+  // Key state variables that should trigger a redraw
+  }, [
+      warehouseWidth, warehouseHeight, cellSize, 
+      multiGridObstacles, startPoint, endPoint, currentPath, robotPosition, 
+      loadedImages, imagesLoaded, // Redraw when images are loaded
+      // drawAll // if drawAll is memoized with useCallback, add it here
+  ]);
+
 
   // Handle canvas click
   const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -419,6 +385,11 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
         className="bg-white shadow-lg rounded-lg transition-all duration-300 hover:shadow-xl"
         onClick={handleCanvasClick}
       />
+      {!imagesLoaded && (
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'black', background: 'rgba(255,255,255,0.8)', padding: '10px', borderRadius: '5px' }}>
+          Loading sprites...
+        </div>
+      )}
     </div>
   );
 };
