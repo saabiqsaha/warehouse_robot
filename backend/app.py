@@ -159,5 +159,4 @@ if __name__ == '__main__':
     # Debug mode allows for auto-reloading on code changes and provides helpful debug info.
     # Host '0.0.0.0' makes it accessible from other devices on the same network.
     print("Warehouse Robot Simulator starting...")
-    print(f"Frontend available at http://localhost:5000")
     app.run(host='0.0.0.0', port=5000, debug=True)

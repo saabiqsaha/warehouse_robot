@@ -55,42 +55,31 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
   const obstacleImagesRef = useRef<Record<string, HTMLImageElement>>({});
   const startFlagRef = useRef<HTMLImageElement | null>(null);
   const endFlagRef = useRef<HTMLImageElement | null>(null);
+  const spritesRef = useRef<Record<string, HTMLImageElement>>({});
 
-  // Initialize images on component mount
+  // Load custom sprites
   useEffect(() => {
-    // Import dynamic image creation functions
-    const importImageGenerators = async () => {
-      const { createRobotImage, createObstacleImages, createFlagImages } = await import('../utils/imageGenerator');
+    // Load custom sprites
+    const loadSprites = async () => {
+      const spriteTypes = ['robot', 'box', 'wall', 'human', 'fork', 'item', 'destination'];
+      const sprites: Record<string, HTMLImageElement> = {};
       
-      // Create robot image
-      const robotImg = new Image();
-      robotImg.src = createRobotImage();
-      robotImgRef.current = robotImg;
-      
-      // Create obstacle images
-      const obstacleImageSrcs = createObstacleImages();
-      const obstacleImages: Record<string, HTMLImageElement> = {};
-      
-      for (const type in obstacleImageSrcs) {
-        const img = new Image();
-        img.src = obstacleImageSrcs[type];
-        obstacleImages[type] = img;
+      for (const type of spriteTypes) {
+        const sprite = new Image();
+        sprite.src = `/sprites/${type}.png`;
+        sprite.onload = () => {
+          sprites[type] = sprite;
+          // Force canvas redraw when sprite loads
+          if (canvasRef.current) {
+            drawWarehouse();
+          }
+        };
       }
-      obstacleImagesRef.current = obstacleImages;
       
-      // Create flag images
-      const flagImageSrcs = createFlagImages();
-      
-      const startFlag = new Image();
-      startFlag.src = flagImageSrcs.start;
-      startFlagRef.current = startFlag;
-      
-      const endFlag = new Image();
-      endFlag.src = flagImageSrcs.end;
-      endFlagRef.current = endFlag;
+      spritesRef.current = sprites;
     };
     
-    importImageGenerators();
+    loadSprites();
   }, []);
 
   // Draw functions
@@ -131,9 +120,7 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
   };
 
   const drawObstacles = (ctx: CanvasRenderingContext2D) => {
-    // Get the current selected obstacle type
-    const obstacleTypeSelect = document.getElementById('obstacle-type') as HTMLSelectElement;
-    const currentSelectedType = obstacleTypeSelect?.value || 'crate';
+    const sprites = spritesRef.current;
     
     // Draw regular single-cell obstacles
     obstacles.forEach(obsDataString => {
@@ -141,21 +128,55 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
       const x = parseInt(xStr);
       const y = parseInt(yStr);
       
-      // Try to draw image first
-      const obstacleImages = obstacleImagesRef.current;
-      const img = obstacleImages[currentSelectedType];
+      // Get obstacle type from multiGridObstacles if this position is part of one
+      let obstacleType = 'box'; // Default type
       
-      if (img && img.complete && img.naturalHeight !== 0) {
+      for (const obstacle of multiGridObstacles) {
+        if (x >= obstacle.x && x < obstacle.x + obstacle.width &&
+            y >= obstacle.y && y < obstacle.y + obstacle.height) {
+          obstacleType = obstacle.type;
+          break;
+        }
+      }
+      
+      // Map the type to the correct sprite
+      let spriteKey;
+      switch (obstacleType) {
+        case 'wall':
+          spriteKey = 'wall';
+          break;
+        case 'crate':
+        case 'box':
+          spriteKey = 'box';
+          break;
+        case 'shelf':
+        case 'item':
+          spriteKey = 'item';
+          break;
+        case 'restricted':
+        case 'human':
+          spriteKey = 'human';
+          break;
+        case 'fork':
+          spriteKey = 'fork';
+          break;
+        default:
+          spriteKey = 'box';
+      }
+      
+      // Try to draw the sprite
+      const sprite = sprites[spriteKey];
+      if (sprite && sprite.complete && sprite.naturalHeight !== 0) {
         ctx.drawImage(
-          img,
-          x * cellSize + 2,
-          y * cellSize + 2,
-          cellSize - 4,
-          cellSize - 4
+          sprite,
+          x * cellSize + 1, // Less padding for larger sprites
+          y * cellSize + 1,
+          cellSize - 2, // Less padding for larger sprites
+          cellSize - 2
         );
       } else {
         // Fallback to color rectangle
-        const obstacleColor = colors.obstacle[currentSelectedType as keyof typeof colors.obstacle] || colors.obstacle.default;
+        const obstacleColor = colors.obstacle[obstacleType as keyof typeof colors.obstacle] || colors.obstacle.default;
         drawCell(ctx, x, y, obstacleColor, true);
       }
     });
@@ -164,75 +185,129 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
     multiGridObstacles.forEach(obstacle => {
       const { x, y, width, height, type } = obstacle;
       
-      // Draw a combined rectangle for the multi-grid obstacle
-      ctx.fillStyle = colors.obstacle[type as keyof typeof colors.obstacle] || colors.obstacle.default;
-      ctx.fillRect(
-        x * cellSize + 2,
-        y * cellSize + 2,
-        width * cellSize - 4,
-        height * cellSize - 4
-      );
+      // Map the type to the correct sprite
+      let spriteKey;
+      switch (type) {
+        case 'wall':
+          spriteKey = 'wall';
+          break;
+        case 'crate':
+        case 'box':
+          spriteKey = 'box';
+          break;
+        case 'shelf':
+        case 'item':
+          spriteKey = 'item';
+          break;
+        case 'restricted':
+        case 'human':
+          spriteKey = 'human';
+          break;
+        case 'fork':
+          spriteKey = 'fork';
+          break;
+        default:
+          spriteKey = 'box';
+      }
       
-      // Try to draw image with proper stretching
-      const obstacleImages = obstacleImagesRef.current;
-      const img = obstacleImages[type];
-      
-      if (img && img.complete && img.naturalHeight !== 0) {
-        ctx.drawImage(
-          img,
+      // Try to draw sprite for each cell of the multi-grid obstacle
+      const sprite = spritesRef.current[spriteKey];
+      if (sprite && sprite.complete && sprite.naturalHeight !== 0) {
+        // Draw the sprite for each cell in the multi-grid obstacle
+        for (let i = 0; i < width; i++) {
+          for (let j = 0; j < height; j++) {
+            // For human multi-grid obstacles, only draw humans at certain positions for realism
+            if (spriteKey === 'human') {
+              // Only show humans at corners and some middle positions
+              if ((i === 0 && j === 0) || 
+                  (i === width-1 && j === 0) || 
+                  (i === 0 && j === height-1) || 
+                  (i === width-1 && j === height-1) ||
+                  (i % 2 === 1 && j % 2 === 0)) {
+                ctx.drawImage(
+                  sprite,
+                  (x + i) * cellSize + 1,
+                  (y + j) * cellSize + 1,
+                  cellSize - 2,
+                  cellSize - 2
+                );
+              } else {
+                // Draw floor with a light overlay for human areas
+                ctx.fillStyle = 'rgba(255, 230, 230, 0.5)'; // Light red area
+                ctx.fillRect(
+                  (x + i) * cellSize + 1,
+                  (y + j) * cellSize + 1,
+                  cellSize - 2,
+                  cellSize - 2
+                );
+              }
+            } else {
+              // For non-human obstacles, draw sprite in all positions
+              ctx.drawImage(
+                sprite,
+                (x + i) * cellSize + 1,
+                (y + j) * cellSize + 1,
+                cellSize - 2,
+                cellSize - 2
+              );
+            }
+          }
+        }
+        
+        // Add border to show it's a multi-grid obstacle
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';  // Darker border
+        ctx.lineWidth = 2;
+        ctx.strokeRect(
+          x * cellSize,
+          y * cellSize,
+          width * cellSize,
+          height * cellSize
+        );
+      } else {
+        // Fallback to color rectangle
+        ctx.fillStyle = colors.obstacle[type as keyof typeof colors.obstacle] || colors.obstacle.default;
+        ctx.fillRect(
+          x * cellSize + 2,
+          y * cellSize + 2,
+          width * cellSize - 4,
+          height * cellSize - 4
+        );
+        
+        // Add some details/shading to make it look 3D
+        ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(
           x * cellSize + 4,
           y * cellSize + 4,
           width * cellSize - 8,
           height * cellSize - 8
         );
       }
-      
-      // Add some details/shading to make it look 3D
-      ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(
-        x * cellSize + 4,
-        y * cellSize + 4,
-        width * cellSize - 8,
-        height * cellSize - 8
-      );
-      
-      // Add text label
-      ctx.fillStyle = '#fff';
-      ctx.font = `${cellSize/3}px Arial`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      
-      let label = '';
-      switch(type) {
-        case 'shelf':
-          label = width > 1 ? 'Shelf Unit' : 'Shelf';
-          break;
-        case 'crate':
-          label = width > 1 ? 'Crates' : 'Crate';
-          break;
-        case 'restricted':
-          label = 'Restricted';
-          break;
-        default:
-          label = 'Obstacle';
-      }
-      
-      ctx.fillText(
-        label,
-        (x + width/2) * cellSize,
-        (y + height/2) * cellSize
-      );
     });
   };
 
   const drawStartPoint = (ctx: CanvasRenderingContext2D) => {
     if (startPoint) {
-      const startFlag = startFlagRef.current;
+      // Try to use the robot sprite for start point
+      const robotSprite = spritesRef.current['robot'];
       
-      if (startFlag && startFlag.complete && startFlag.naturalHeight !== 0) {
+      if (robotSprite && robotSprite.complete && robotSprite.naturalHeight !== 0) {
+        // Make the start point robot larger
+        const startSize = cellSize * 1.1;
+        const startX = startPoint.x * cellSize + cellSize/2 - startSize/2;
+        const startY = startPoint.y * cellSize + cellSize/2 - startSize/2;
+        
         ctx.drawImage(
-          startFlag,
+          robotSprite,
+          startX,
+          startY,
+          startSize,
+          startSize
+        );
+      } else if (startFlagRef.current && startFlagRef.current.complete && startFlagRef.current.naturalHeight !== 0) {
+        // Fallback to generated start flag
+        ctx.drawImage(
+          startFlagRef.current,
           startPoint.x * cellSize + 2,
           startPoint.y * cellSize + 2,
           cellSize - 4,
@@ -258,11 +333,26 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
 
   const drawEndPoint = (ctx: CanvasRenderingContext2D) => {
     if (endPoint) {
-      const endFlag = endFlagRef.current;
+      // Try to use the destination sprite for end point
+      const destinationSprite = spritesRef.current['destination'];
       
-      if (endFlag && endFlag.complete && endFlag.naturalHeight !== 0) {
+      if (destinationSprite && destinationSprite.complete && destinationSprite.naturalHeight !== 0) {
+        // Make destination larger
+        const destSize = cellSize * 1.1;
+        const destX = endPoint.x * cellSize + cellSize/2 - destSize/2;
+        const destY = endPoint.y * cellSize + cellSize/2 - destSize/2;
+        
         ctx.drawImage(
-          endFlag,
+          destinationSprite,
+          destX,
+          destY,
+          destSize,
+          destSize
+        );
+      } else if (endFlagRef.current && endFlagRef.current.complete && endFlagRef.current.naturalHeight !== 0) {
+        // Fallback to generated end flag
+        ctx.drawImage(
+          endFlagRef.current,
           endPoint.x * cellSize + 2,
           endPoint.y * cellSize + 2,
           cellSize - 4,
@@ -324,16 +414,24 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
       const centerX = robotPosition.x * cellSize + cellSize / 2;
       const centerY = robotPosition.y * cellSize + cellSize / 2;
       
-      const robotImg = robotImgRef.current;
-      if (robotImg && robotImg.complete && robotImg.naturalHeight !== 0) {
-        // Calculate size based on cell size
-        const robotSize = cellSize * 0.8;
+      // Try to use the custom robot sprite
+      const robotSprite = spritesRef.current['robot'];
+      if (robotSprite && robotSprite.complete && robotSprite.naturalHeight !== 0) {
+        // Calculate size based on cell size - make robot larger
+        const robotSize = cellSize * 1.2;
         
         // Calculate position to center in cell
         const robotX = centerX - robotSize/2;
         const robotY = centerY - robotSize/2;
         
-        ctx.drawImage(robotImg, robotX, robotY, robotSize, robotSize);
+        ctx.drawImage(robotSprite, robotX, robotY, robotSize, robotSize);
+      } else if (robotImgRef.current && robotImgRef.current.complete && robotImgRef.current.naturalHeight !== 0) {
+        // Fallback to generated robot image
+        const robotSize = cellSize * 1.2;
+        const robotX = centerX - robotSize/2;
+        const robotY = centerY - robotSize/2;
+        
+        ctx.drawImage(robotImgRef.current, robotX, robotY, robotSize, robotSize);
       } else {
         // Fallback to circle robot
         const radius = cellSize / 2.5;

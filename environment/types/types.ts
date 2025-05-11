@@ -24,12 +24,31 @@ export interface WarehouseState {
   currentMode: string;
   animationInProgress: boolean;
   animationSpeed: number;
+  presetSprites?: Record<string, string>;
 }
 
 export interface ObstacleTemplate {
   width: number;
   height: number;
   type: string;
+}
+
+export interface ObstaclePoint {
+  x: number;
+  y: number;
+  type: string;
+  width?: number;
+  height?: number;
+}
+
+export interface PresetEnvironment {
+  name: string;
+  width: number;
+  height: number;
+  description: string;
+  obstacles: ObstaclePoint[];
+  startPoint: Point;
+  endPoint: Point;
 }
 
 export interface Colors {

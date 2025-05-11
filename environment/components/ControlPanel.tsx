@@ -19,6 +19,7 @@ interface ControlPanelProps {
   onWidthChange: (width: number) => void;
   onHeightChange: (height: number) => void;
   onObstacleTypeChange: (type: string) => void;
+  onLoadPreset: (presetKey: string) => void;
 }
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -36,7 +37,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onClearSimulation,
   onWidthChange,
   onHeightChange,
-  onObstacleTypeChange
+  onObstacleTypeChange,
+  onLoadPreset
 }) => {
   const { warehouseWidth, warehouseHeight, currentMode } = warehouseState;
 
@@ -106,6 +108,31 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         >
           Initialize Warehouse
         </button>
+      </div>
+
+      <div className="bg-gray-50 rounded-lg p-4 mb-4 shadow-sm">
+        <h2 className="text-lg font-semibold mb-3 pb-2 border-b-2 border-blue-100 text-blue-700">Preset Environments</h2>
+        <p className="text-gray-600 text-sm mb-3">Choose a pre-defined environment:</p>
+        <div className="grid grid-cols-1 gap-2">
+          <button 
+            className="bg-purple-600 text-white rounded py-2 px-4 hover:bg-purple-700 transition-colors"
+            onClick={() => onLoadPreset('amazon')}
+          >
+            Amazon Fulfillment Center
+          </button>
+          <button 
+            className="bg-green-600 text-white rounded py-2 px-4 hover:bg-green-700 transition-colors"
+            onClick={() => onLoadPreset('nvidia')}
+          >
+            NVIDIA GPU Factory
+          </button>
+          <button 
+            className="bg-red-600 text-white rounded py-2 px-4 hover:bg-red-700 transition-colors"
+            onClick={() => onLoadPreset('tesla')}
+          >
+            Tesla Gigafactory
+          </button>
+        </div>
       </div>
 
       <div className="bg-gray-50 rounded-lg p-4 mb-4 shadow-sm">

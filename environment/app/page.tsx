@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import WarehouseCanvas from '../components/WarehouseCanvas';
 import ControlPanel from '../components/ControlPanel';
 import { WarehouseState, Point, MultiGridObstacle, ObstacleTemplate } from '../types/types';
+import { getPresetEnvironment } from '../utils/presetEnvironmentHelper';
 
 export default function Home() {
   // Constants
@@ -59,7 +60,7 @@ export default function Home() {
     robotPosition: null,
     currentMode: 'none',
     animationInProgress: false,
-    animationSpeed: 300 // milliseconds between steps
+    animationSpeed: 200 // faster animation (was 300ms)
   });
   
   const [statusMessage, setStatusMessage] = useState<string>('');
@@ -369,16 +370,20 @@ export default function Home() {
     }
     
     // Stop any existing animation
-    if (warehouseState.animationInProgress && animationFrame !== null) {
+    if (animationFrame !== null) {
       clearTimeout(animationFrame);
       setAnimationFrame(null);
-      setWarehouseState((prev: WarehouseState) => ({ ...prev, animationInProgress: false }));
     }
     
-    updateStatusMessage("Calculating route...", 'info');
+    // Reset animation state
+    setWarehouseState((prev: WarehouseState) => ({ 
+      ...prev, 
+      animationInProgress: false,
+      currentPath: [], 
+      robotPosition: { ...startPoint } // Ensure robot is at start position
+    }));
     
-    // Clear previous path
-    setWarehouseState((prev: WarehouseState) => ({ ...prev, currentPath: [] }));
+    updateStatusMessage("Calculating route...", 'info');
     
     try {
       const response = await fetch(`${BASE_API_URL}/plan_path`, {
@@ -398,11 +403,22 @@ export default function Home() {
       const data = await response.json();
       
       if (data.path && data.path.length > 0) {
-        setWarehouseState((prev: WarehouseState) => ({ ...prev, currentPath: data.path }));
+        console.log("Path found:", data.path);
+        
+        // Update state with the new path
+        setWarehouseState((prev: WarehouseState) => ({ 
+          ...prev, 
+          currentPath: data.path,
+          robotPosition: { ...startPoint }
+        }));
+        
         updateStatusMessage(`Path found with ${data.path.length} steps. Starting robot...`, 'success');
         
-        // Start the robot animation
-        startRobotAnimation();
+        // Use a shorter delay to start animation
+        setTimeout(() => {
+          console.log("Starting robot animation...");
+          startRobotAnimation();
+        }, 200);
       } else {
         updateStatusMessage(data.message || "No path could be found.", 'info');
       }
@@ -414,15 +430,23 @@ export default function Home() {
 
   // Robot animation functions
   const animateRobot = () => {
-    const { robotPosition, currentPath, startPoint, animationSpeed } = warehouseState;
+    const { robotPosition, currentPath, animationSpeed } = warehouseState;
     
-    if (!robotPosition || currentPath.length <= 1 || !startPoint) {
+    // Validate we have everything needed for animation
+    if (!robotPosition) {
+      console.log("Animation stopped: No robot position");
+      setWarehouseState((prev: WarehouseState) => ({ ...prev, animationInProgress: false }));
+      return;
+    }
+    
+    if (!currentPath || currentPath.length <= 1) {
+      console.log("Animation stopped: Path too short or missing");
       setWarehouseState((prev: WarehouseState) => ({ ...prev, animationInProgress: false }));
       return;
     }
     
     // Find the current position in the path
-    let currentIndex = 0;
+    let currentIndex = -1;
     for (let i = 0; i < currentPath.length; i++) {
       if (currentPath[i].x === robotPosition.x && currentPath[i].y === robotPosition.y) {
         currentIndex = i;
@@ -430,8 +454,32 @@ export default function Home() {
       }
     }
     
+    // If robot's current position is not on path, reset to the start
+    if (currentIndex === -1) {
+      console.log("Robot not on path, starting from beginning");
+      if (currentPath.length > 0) {
+        setWarehouseState((prev: WarehouseState) => ({
+          ...prev,
+          robotPosition: { ...currentPath[0] }
+        }));
+        
+        // Schedule the next animation frame
+        const frameId = window.setTimeout(() => {
+          animateRobot();
+        }, animationSpeed);
+        
+        setAnimationFrame(frameId);
+        return;
+      } else {
+        // No valid path
+        setWarehouseState((prev: WarehouseState) => ({ ...prev, animationInProgress: false }));
+        return;
+      }
+    }
+    
     // If we've reached the end, stop animation
     if (currentIndex >= currentPath.length - 1) {
+      console.log("Robot reached destination");
       setWarehouseState((prev: WarehouseState) => ({ ...prev, animationInProgress: false }));
       updateStatusMessage("Robot reached the destination!", 'success');
       return;
@@ -439,13 +487,14 @@ export default function Home() {
     
     // Move to the next point in the path
     const nextPosition = currentPath[currentIndex + 1];
+    console.log(`Robot moving from (${robotPosition.x},${robotPosition.y}) to (${nextPosition.x},${nextPosition.y})`);
     
     setWarehouseState((prev: WarehouseState) => ({
       ...prev,
       robotPosition: { ...nextPosition }
     }));
     
-    // Schedule the next animation frame
+    // Schedule the next animation frame with a consistent speed
     const frameId = window.setTimeout(() => {
       animateRobot();
     }, animationSpeed);
@@ -454,21 +503,27 @@ export default function Home() {
   };
   
   const startRobotAnimation = () => {
-    const { animationInProgress, currentPath, startPoint } = warehouseState;
+    const { animationInProgress, currentPath, startPoint, animationSpeed } = warehouseState;
     
-    if (animationInProgress) return;
+    // Don't restart if already in progress
+    if (animationInProgress) {
+      console.log("Animation already in progress - not restarting");
+      return;
+    }
     
-    if (!currentPath.length || !startPoint) {
+    if (!currentPath || currentPath.length === 0) {
+      console.log("No path available for animation");
       updateStatusMessage("No path available for robot to follow.", 'error');
       return;
     }
     
-    // Set robot at start position
-    setWarehouseState((prev: WarehouseState) => ({
-      ...prev,
-      robotPosition: { ...startPoint },
-      animationInProgress: true
-    }));
+    if (!startPoint) {
+      console.log("No start point defined");
+      updateStatusMessage("Robot start position not defined.", 'error');
+      return;
+    }
+    
+    console.log("Starting robot animation with path:", currentPath);
     
     // Clear any existing animation
     if (animationFrame !== null) {
@@ -476,13 +531,24 @@ export default function Home() {
       setAnimationFrame(null);
     }
     
-    // Start animation
+    // Set robot at start position and mark animation as in progress
+    setWarehouseState((prev: WarehouseState) => ({
+      ...prev,
+      robotPosition: { ...startPoint },
+      animationInProgress: true
+    }));
+    
+    // Start animation with visual feedback
     updateStatusMessage("Robot is moving to destination...", 'info');
+    
+    // Use a shorter animation speed for the first frame
+    const initialDelay = Math.min(200, animationSpeed);
     
     // Schedule first animation frame
     const frameId = window.setTimeout(() => {
+      console.log("Animation starting, first frame triggered");
       animateRobot();
-    }, warehouseState.animationSpeed);
+    }, initialDelay);
     
     setAnimationFrame(frameId);
   };
@@ -526,6 +592,83 @@ export default function Home() {
     }));
     
     updateStatusMessage("Simulation reset. Initialize warehouse if needed.", 'info');
+  };
+  
+  // Load a preset environment
+  const loadPreset = async (presetKey: string) => {
+    const preset = getPresetEnvironment(presetKey);
+    
+    if (!preset) {
+      updateStatusMessage(`Preset environment "${presetKey}" not found.`, 'error');
+      return;
+    }
+    
+    updateStatusMessage(`Loading preset environment: ${preset.name}...`, 'info');
+    
+    // First initialize the warehouse with the preset dimensions
+    try {
+      const response = await fetch(`${BASE_API_URL}/initialize_warehouse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ width: preset.width, height: preset.height })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
+      }
+      
+      // Create a new obstacles Set
+      const newObstacles = new Set<string>();
+      const newMultiGridObstacles: MultiGridObstacle[] = [];
+      
+      // Add all obstacles to backend and to our local state
+      for (const obstacle of preset.obstacles) {
+        const obsKey = `${obstacle.x},${obstacle.y}`;
+        newObstacles.add(obsKey);
+           // Add to backend
+      try {
+        await fetch(`${BASE_API_URL}/obstacle`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ x: obstacle.x, y: obstacle.y })
+        });
+      } catch (error) {
+        console.error(`Error adding obstacle at (${obstacle.x},${obstacle.y}):`, error);
+      }
+      
+      // Check if this is a multi-grid obstacle marker
+      if (obstacle.width && obstacle.height && obstacle.width > 1 && obstacle.height > 1) {
+        newMultiGridObstacles.push({
+          x: obstacle.x,
+          y: obstacle.y,
+          width: obstacle.width,
+          height: obstacle.height,
+          type: obstacle.type
+        });
+      }
+      }
+      
+      // Update state with the preset environment
+      setWarehouseState((prev: WarehouseState) => ({
+        ...prev,
+        warehouseWidth: preset.width,
+        warehouseHeight: preset.height,
+        obstacles: newObstacles,
+        multiGridObstacles: newMultiGridObstacles,
+        startPoint: preset.startPoint,
+        endPoint: preset.endPoint,
+        currentPath: [],
+        robotPosition: preset.startPoint,
+        currentMode: 'none',
+        animationInProgress: false
+      }));
+      
+      updateStatusMessage(`${preset.name} loaded successfully! ${preset.description}`, 'success');
+    } catch (error) {
+      console.error("Error loading preset environment:", error);
+      updateStatusMessage(`Failed to load preset: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    }
   };
 
   // Handle width and height changes
@@ -578,6 +721,7 @@ export default function Home() {
         onWidthChange={handleWidthChange}
         onHeightChange={handleHeightChange}
         onObstacleTypeChange={handleObstacleTypeChange}
+        onLoadPreset={loadPreset}
       />
     </div>
   );
