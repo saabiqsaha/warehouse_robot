@@ -197,8 +197,8 @@ export function createObstacleImages(): Record<string, string> {
 }
 
 // Create flag images
-export function createFlagImages(): { start: string, end: string } {
-  const flags: { start: string, end: string } = { start: '', end: '' };
+export function createFlagImages(): { start: string; end: string } {
+  const flags = { start: '', end: '' };
   
   // Create start flag
   const startCanvas = document.createElement('canvas');
@@ -280,4 +280,4 @@ export function createFlagImages(): { start: string, end: string } {
   }
   
   return flags;
-} 
+}

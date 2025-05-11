@@ -1,31 +1,22 @@
 'use client';
 
 import React, { useRef, useEffect } from 'react';
-import { WarehouseState } from '../types/types';
+import { WarehouseState, Point, MultiGridObstacle } from '../types/types';
 
 interface WarehouseCanvasProps {
   warehouseState: WarehouseState;
-  cellSize: number;
-  colors: any;
-  robotImg: HTMLImageElement;
-  obstacleImages: Record<string, HTMLImageElement>;
-  startFlag: HTMLImageElement;
-  endFlag: HTMLImageElement;
+  onCanvasClick: (gridX: number, gridY: number) => void;
 }
 
 const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
   warehouseState,
-  cellSize,
-  colors,
-  robotImg,
-  obstacleImages,
-  startFlag,
-  endFlag
+  onCanvasClick
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { 
     warehouseWidth, 
     warehouseHeight, 
+    cellSize, 
     obstacles, 
     multiGridObstacles,
     startPoint, 
@@ -34,41 +25,78 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
     robotPosition 
   } = warehouseState;
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Set canvas dimensions
-    if (warehouseWidth > 0 && warehouseHeight > 0) {
-      canvas.width = warehouseWidth * cellSize;
-      canvas.height = warehouseHeight * cellSize;
-      
-      // Draw everything
-      drawAll(ctx);
+  // Colors for drawing
+  const colors = {
+    gridLines: '#e0e0e0', // Lighter grey for grid lines
+    text: '#333333',
+    floor: '#f5f5f5', // Light grey floor
+    // Obstacle type colors (as fallbacks if images don't load)
+    obstacle: { // Default obstacle color if not specified by type
+      crate: '#78909c',   // Blue Grey (like a metal crate)
+      shelf: '#546e7a',   // Darker Blue Grey (like a shelf unit)
+      restricted: '#ef5350', // Muted Red (for restricted zone)
+      default: '#607d8b'  // Default if type unknown
+    },
+    startPoint: '#4CAF50', // Green
+    endPoint: '#f44336',   // Red
+    path: '#64b5f6',       // Lighter blue for path
+    pathHighlight: '#2196f3', // Brighter blue for current segment
+    robot: '#ff9800',      // Orange (common for robots/highlight)
+    // Status message colors
+    status: {
+      success: '#28a745',
+      error: '#dc3545',
+      info: '#007bff' // Can use accent for general info
     }
-  }, [
-    warehouseState, 
-    cellSize, 
-    colors, 
-    robotImg, 
-    obstacleImages, 
-    startFlag, 
-    endFlag
-  ]);
-
-  const drawAll = (ctx: CanvasRenderingContext2D) => {
-    drawGrid(ctx);
-    drawPath(ctx);
-    drawObstacles(ctx);
-    drawStartPoint(ctx);
-    drawEndPoint(ctx);
-    drawRobot(ctx);
   };
 
+  // Image refs
+  const robotImgRef = useRef<HTMLImageElement | null>(null);
+  const obstacleImagesRef = useRef<Record<string, HTMLImageElement>>({});
+  const startFlagRef = useRef<HTMLImageElement | null>(null);
+  const endFlagRef = useRef<HTMLImageElement | null>(null);
+
+  // Initialize images on component mount
+  useEffect(() => {
+    // Import dynamic image creation functions
+    const importImageGenerators = async () => {
+      const { createRobotImage, createObstacleImages, createFlagImages } = await import('../utils/imageGenerator');
+      
+      // Create robot image
+      const robotImg = new Image();
+      robotImg.src = createRobotImage();
+      robotImgRef.current = robotImg;
+      
+      // Create obstacle images
+      const obstacleImageSrcs = createObstacleImages();
+      const obstacleImages: Record<string, HTMLImageElement> = {};
+      
+      for (const type in obstacleImageSrcs) {
+        const img = new Image();
+        img.src = obstacleImageSrcs[type];
+        obstacleImages[type] = img;
+      }
+      obstacleImagesRef.current = obstacleImages;
+      
+      // Create flag images
+      const flagImageSrcs = createFlagImages();
+      
+      const startFlag = new Image();
+      startFlag.src = flagImageSrcs.start;
+      startFlagRef.current = startFlag;
+      
+      const endFlag = new Image();
+      endFlag.src = flagImageSrcs.end;
+      endFlagRef.current = endFlag;
+    };
+    
+    importImageGenerators();
+  }, []);
+
+  // Draw functions
   const drawGrid = (ctx: CanvasRenderingContext2D) => {
+    if (warehouseWidth === 0 || warehouseHeight === 0) return;
+    
     // Draw floor background
     ctx.fillStyle = colors.floor;
     ctx.fillRect(0, 0, warehouseWidth * cellSize, warehouseHeight * cellSize);
@@ -83,7 +111,6 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
       ctx.lineTo(x * cellSize, warehouseHeight * cellSize);
       ctx.stroke();
     }
-
     for (let y = 0; y <= warehouseHeight; y++) {
       ctx.beginPath();
       ctx.moveTo(0, y * cellSize);
@@ -96,6 +123,7 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
     if (x < 0 || x >= warehouseWidth || y < 0 || y >= warehouseHeight) return;
     ctx.fillStyle = color;
     if (isObstacle) {
+      // Slightly inset obstacles for a cleaner look
       ctx.fillRect(x * cellSize + 2, y * cellSize + 2, cellSize - 4, cellSize - 4);
     } else {
       ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, cellSize - 2);
@@ -103,16 +131,20 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
   };
 
   const drawObstacles = (ctx: CanvasRenderingContext2D) => {
+    // Get the current selected obstacle type
+    const obstacleTypeSelect = document.getElementById('obstacle-type') as HTMLSelectElement;
+    const currentSelectedType = obstacleTypeSelect?.value || 'crate';
+    
     // Draw regular single-cell obstacles
-    Array.from(obstacles).forEach(obsDataString => {
+    obstacles.forEach(obsDataString => {
       const [xStr, yStr] = obsDataString.split(',');
       const x = parseInt(xStr);
       const y = parseInt(yStr);
       
-      const currentSelectedType = 'crate'; // Default type for existing obstacles
-      
-      // Try to draw image
+      // Try to draw image first
+      const obstacleImages = obstacleImagesRef.current;
       const img = obstacleImages[currentSelectedType];
+      
       if (img && img.complete && img.naturalHeight !== 0) {
         ctx.drawImage(
           img,
@@ -123,7 +155,7 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
         );
       } else {
         // Fallback to color rectangle
-        const obstacleColor = colors.obstacle[currentSelectedType] || colors.obstacle.default;
+        const obstacleColor = colors.obstacle[currentSelectedType as keyof typeof colors.obstacle] || colors.obstacle.default;
         drawCell(ctx, x, y, obstacleColor, true);
       }
     });
@@ -133,7 +165,7 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
       const { x, y, width, height, type } = obstacle;
       
       // Draw a combined rectangle for the multi-grid obstacle
-      ctx.fillStyle = colors.obstacle[type] || colors.obstacle.default;
+      ctx.fillStyle = colors.obstacle[type as keyof typeof colors.obstacle] || colors.obstacle.default;
       ctx.fillRect(
         x * cellSize + 2,
         y * cellSize + 2,
@@ -142,7 +174,9 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
       );
       
       // Try to draw image with proper stretching
+      const obstacleImages = obstacleImagesRef.current;
       const img = obstacleImages[type];
+      
       if (img && img.complete && img.naturalHeight !== 0) {
         ctx.drawImage(
           img,
@@ -194,7 +228,9 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
 
   const drawStartPoint = (ctx: CanvasRenderingContext2D) => {
     if (startPoint) {
-      if (startFlag.complete && startFlag.naturalHeight !== 0) {
+      const startFlag = startFlagRef.current;
+      
+      if (startFlag && startFlag.complete && startFlag.naturalHeight !== 0) {
         ctx.drawImage(
           startFlag,
           startPoint.x * cellSize + 2,
@@ -222,7 +258,9 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
 
   const drawEndPoint = (ctx: CanvasRenderingContext2D) => {
     if (endPoint) {
-      if (endFlag.complete && endFlag.naturalHeight !== 0) {
+      const endFlag = endFlagRef.current;
+      
+      if (endFlag && endFlag.complete && endFlag.naturalHeight !== 0) {
         ctx.drawImage(
           endFlag,
           endPoint.x * cellSize + 2,
@@ -249,7 +287,7 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
   };
 
   const drawPath = (ctx: CanvasRenderingContext2D) => {
-    if (currentPath && currentPath.length > 0) {
+    if (currentPath.length > 0) {
       // Draw path background
       ctx.strokeStyle = colors.path;
       ctx.lineWidth = Math.max(2, cellSize / 6);
@@ -286,7 +324,8 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
       const centerX = robotPosition.x * cellSize + cellSize / 2;
       const centerY = robotPosition.y * cellSize + cellSize / 2;
       
-      if (robotImg.complete && robotImg.naturalHeight !== 0) {
+      const robotImg = robotImgRef.current;
+      if (robotImg && robotImg.complete && robotImg.naturalHeight !== 0) {
         // Calculate size based on cell size
         const robotSize = cellSize * 0.8;
         
@@ -331,13 +370,57 @@ const WarehouseCanvas: React.FC<WarehouseCanvasProps> = ({
     }
   };
 
+  const drawAll = (ctx: CanvasRenderingContext2D) => {
+    drawGrid(ctx);
+    drawPath(ctx);
+    drawObstacles(ctx);
+    drawStartPoint(ctx);
+    drawEndPoint(ctx);
+    drawRobot(ctx);
+  };
+
+  // Redraw canvas whenever any of the dependencies change
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    if (warehouseWidth > 0 && warehouseHeight > 0) {
+      canvas.width = warehouseWidth * cellSize;
+      canvas.height = warehouseHeight * cellSize;
+      drawAll(ctx);
+    }
+  }, [warehouseWidth, warehouseHeight, cellSize, obstacles, multiGridObstacles, startPoint, endPoint, currentPath, robotPosition]);
+
+  // Handle canvas click
+  const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas || warehouseWidth === 0 || warehouseHeight === 0) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const clickY = event.clientY - rect.top;
+    
+    const gridX = Math.floor(clickX / cellSize);
+    const gridY = Math.floor(clickY / cellSize);
+    
+    if (gridX >= 0 && gridX < warehouseWidth && gridY >= 0 && gridY < warehouseHeight) {
+      onCanvasClick(gridX, gridY);
+    }
+  };
+
   return (
-    <canvas 
-      ref={canvasRef} 
-      id="warehouse-canvas" 
-      className="bg-white shadow-lg rounded-lg transition-all hover:shadow-xl"
-    />
+    <div className="flex flex-3 bg-gray-50 justify-center items-center p-5 shadow-inner border-r border-gray-300 relative">
+      <canvas 
+        ref={canvasRef} 
+        id="warehouse-canvas"
+        className="bg-white shadow-lg rounded-lg transition-all duration-300 hover:shadow-xl"
+        onClick={handleCanvasClick}
+      />
+    </div>
   );
 };
 
-export default WarehouseCanvas; 
+export default WarehouseCanvas;

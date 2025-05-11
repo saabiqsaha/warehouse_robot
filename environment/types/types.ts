@@ -52,4 +52,4 @@ export interface Colors {
     error: string;
     info: string;
   };
-} 
+}
