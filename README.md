@@ -1,79 +1,52 @@
 # Warehouse Robot Simulator
 
-A web-based warehouse robot simulator that allows you to:
-- Create a customizable warehouse grid
-- Place and remove obstacles
-- Set start and destination points
-- Calculate and visualize optimal robot paths
+A web-based simulator that lets you create a warehouse environment, place obstacles, and calculate optimal robot paths with visual feedback.
 
-## Getting Started
+## Setup
 
 ### Prerequisites
+- Python 3.6+
+- Node.js and npm
 
-- Python 3.6 or higher
-- pip (Python package manager)
+### Installation & Running
 
-### Installation
-
-1. Clone this repository or download the source code
-2. Navigate to the project directory
-3. Install required dependencies:
-
+**Backend:**
 ```bash
 pip install -r backend/requirements.txt
-```
-
-### Running the Application
-
-1. Start the application by running:
-
-```bash
 cd backend
 python app.py
 ```
 
-2. Open your web browser and navigate to:
+**Frontend:**
+```bash
+cd environment
+npm install
+npm run dev
 ```
-http://localhost:5000
-```
 
-The web interface will be automatically loaded, and you'll be able to use the simulator right away.
+Access the application at:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:5000
 
-## How to Use
+## Features
 
-1. **Initialize the Warehouse**:
-   - Enter the desired grid dimensions (width and height)
-   - Click "Initialize Warehouse"
+- Configure warehouse grid dimensions
+- Place/remove different types of obstacles
+- Set robot start and destination points
+- Calculate and visualize optimal paths
+- Predefined environment templates (Amazon Fulfilment Center, Nvidia GPU Farm, Tesla Gigafactory)
+- Sprite-based visualization
 
-2. **Set Navigation Points**:
-   - Click "Set Robot Start" and then click on the grid to place the starting point
-   - Click "Set Destination" and then click on the grid to place the destination
+## Usage
 
-3. **Manage Obstacles**:
-   - Select an obstacle type from the dropdown
-   - Click "Place/Remove Obstacle" and then click on grid cells to add or remove obstacles
-   - Click on an existing obstacle to remove it
-
-4. **Calculate Path**:
-   - After setting both start and destination points, click "Calculate Path"
-   - The optimal path will be displayed on the grid
-
-5. **Reset Simulation**:
-   - Click "Reset Simulation" to clear the grid and start over
+1. Select a predefined environment or initialize a custom warehouse
+2. Set robot start and destination points by clicking on the grid
+3. Add obstacles as needed
+4. Click "Calculate Path" to find the optimal route
+5. Use "Reset Simulation" to start over
 
 ## Project Structure
 
-- **backend/** - Contains the Flask server and path-finding algorithms
-  - **app.py** - Main Flask application
-  - **warehouse.py** - Warehouse model
-  - **path_planning.py** - Path-finding algorithms
-  
-- **frontend/** - Contains the web interface
-  - **index.html** - Main HTML file
-  - **script.js** - JavaScript for UI and API interactions
-  - **style.css** - CSS styling
-
-## Technologies Used
-
-- **Backend**: Python, Flask, Flask-CORS
-- **Frontend**: HTML5, CSS3, JavaScript
+- **backend/**: Flask server and path-finding algorithms
+- **environment/**: Next.js frontend application
+- **public/sprites/**: Visual assets for environment objects
