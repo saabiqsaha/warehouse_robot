@@ -1,9 +1,13 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS # For handling Cross-Origin Resource Sharing
+import os
 
 # Import our custom modules
 from warehouse import Warehouse
 from path_planning import find_path_bfs
+
+# Get the absolute path to the frontend directory
+FRONTEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'frontend'))
 
 app = Flask(__name__)
 CORS(app) # This will allow requests from your frontend (running on a different port)
@@ -14,13 +18,25 @@ CORS(app) # This will allow requests from your frontend (running on a different 
 current_warehouse = None
 
 @app.route('/')
+def serve_frontend():
+    """
+    Serve the frontend index.html file
+    """
+    return send_from_directory(FRONTEND_DIR, 'index.html')
+
+# Serve static files (script.js, style.css)
+@app.route('/<path:filename>')
+def serve_static(filename):
+    return send_from_directory(FRONTEND_DIR, filename)
+
+@app.route('/api')
 def home():
     """
     A simple root endpoint to check if the server is running.
     """
     return jsonify({"message": "Warehouse simulation backend is running!"})
 
-@app.route('/initialize_warehouse', methods=['POST'])
+@app.route('/api/initialize_warehouse', methods=['POST'])
 def initialize_warehouse_endpoint():
     """
     Initializes or re-initializes the warehouse with given dimensions.
@@ -49,7 +65,7 @@ def initialize_warehouse_endpoint():
         "obstacles": list(current_warehouse.obstacles) # Initially empty
     }), 200
 
-@app.route('/obstacle', methods=['POST', 'DELETE'])
+@app.route('/api/obstacle', methods=['POST', 'DELETE'])
 def manage_obstacle():
     """
     Manages obstacles in the warehouse.
@@ -91,7 +107,7 @@ def manage_obstacle():
         else:
             return jsonify({"error": f"Failed to remove obstacle at ({x},{y}). It might not exist."}), 404 # Not Found
 
-@app.route('/plan_path', methods=['POST'])
+@app.route('/api/plan_path', methods=['POST'])
 def plan_path_endpoint():
     """
     Calculates the path for the robot.
@@ -142,4 +158,6 @@ if __name__ == '__main__':
     # Runs the Flask development server.
     # Debug mode allows for auto-reloading on code changes and provides helpful debug info.
     # Host '0.0.0.0' makes it accessible from other devices on the same network.
+    print("Warehouse Robot Simulator starting...")
+    print(f"Frontend available at http://localhost:5000")
     app.run(host='0.0.0.0', port=5000, debug=True)
